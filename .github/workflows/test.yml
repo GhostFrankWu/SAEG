@@ -1,0 +1,39 @@
+name: test
+
+on:
+  push:
+    branches: [main, test-dev]
+  pull_request:
+    branches: [main]
+
+env:
+  secret: Release
+
+jobs:
+  branch-mark:
+    runs-on: ubuntu-20.04
+    defaults:
+      run:
+        working-directory: ./aeg_module
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build environment docker image
+        run: |
+          cd ..
+          docker build -t saeg:01 .
+
+      - name: Test SOF Dataset
+        run: |
+          docker run -v /tmp:/test_res saeg:01 bash -c 'cd /aeg && python3 saeg.py -f x -t stack'
+
+      - name: Get SOF Test Result
+        run: |
+          cat /tmp/test_result.txt
+
+      - name: Test Heap Dataset
+        run: |
+          docker run -v /tmp:/test_res saeg:01 bash -c 'cd /aeg && python3 saeg.py -f x -t heap'
+
+      - name: Get Heap Test Result
+        run: |
+          cat /tmp/test_result.txt

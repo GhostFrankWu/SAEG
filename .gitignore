@@ -1,0 +1,7 @@
+*.pyc
+*.bak
+*.txt
+out
+flag
+log
+__pycache__
