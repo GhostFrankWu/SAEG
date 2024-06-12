@@ -20,7 +20,7 @@ class InteractiveBinary:
         self.arch_bytes = arch_bytes
         self.chunk_maps = {}
         self.current_process = None
-        self.rop_address = 0
+        self.rop_address = challenge.target_binary.entry
         self.constant_to_be_add = []
         self.payload_len = 0
         self.overflow_mem = None

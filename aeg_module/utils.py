@@ -61,9 +61,9 @@ def get_win_functions(challenge):
     else:
         challenge.r2_op('aa')
         challenge.r2_op('aac')
-    functions = [func for func in json.loads(r2.cmd('aflj'))]
+    functions = [func for func in r2.cmdj('aflj')]
     string_used_addr = {}
-    strings = [string_ for string_ in json.loads(r2.cmd('izj'))]
+    strings = [string_ for string_ in r2.cmdj('izj')]
     for string_ in strings:
         value = string_['string']
         if any([x[:-1] in value for x in known_flag_names]):
@@ -106,20 +106,19 @@ def greedy_backward_search(challenge, target_addr, start_addr=None, max_depth=32
     r2 = challenge.get_r2()
     challenge.r2_op('aaaaa')
     if start_addr is None:
-        start_addr = json.loads(r2.cmd('iej'))[0]['vaddr']
+        start_addr = r2.cmdj('iej')[0]['vaddr']
     if start_addr != target_addr:
         xrefs = None
         target_bb_addr = target_addr
         while not xrefs:
-            bb = r2.cmd(f'afbij @ {target_bb_addr}')  # afbij may return multiple basic blocks
-            target_bb_addr = json.loads(bb if '\n' not in bb else bb.split('\n')[0])
+            target_bb_addr = r2.cmdj(f'afbij @ {target_bb_addr}')
             if type(target_bb_addr) is list:  # radare2/pull/22948
                 target_bb_addr = target_bb_addr[0].get('addr')
             else:
                 target_bb_addr = target_bb_addr.get('addr')
             if target_bb_addr is None:
                 return [target_addr]
-            xrefs = json.loads(r2.cmd(f'axtj @ {target_bb_addr}'))
+            xrefs = r2.cmdj(f'axtj @ {target_bb_addr}')
             target_bb_addr -= 1  # todo: better way to find the start address
         for i in xrefs:
             r = greedy_backward_search(challenge, i['from'], start_addr, max_depth - 1)
@@ -139,7 +138,7 @@ def pre_process_flirt(challenge):
             challenge.r2_op(f'zfs {flirt}')
     else:
         r2.cmd(f'zfs {challenge.target_property["flirt"]}')
-    functions = [func for func in json.loads(r2.cmd('aflj'))]
+    functions = [func for func in r2.cmdj('aflj')]
     recognized_functions = []
     for func in functions:
         if func['name'][:6] == 'flirt.':
@@ -173,7 +172,7 @@ def dump_payload(sim_state, reset_stdin=True):
 def get_func_block_by_r2(binary):
     r2 = binary.get_r2()
     binary.r2_op('aa')  # aaaa is better, but takes longer time
-    functions = [func for func in json.loads(r2.cmd('aflj'))]
+    functions = [func for func in r2.cmdj('aflj')]
     get_functions = {}
     for func in functions:
         get_functions[func['name']] = {'addr': func['offset'], 'size': func['size']}
@@ -328,3 +327,17 @@ def get_max_successive_symbolic_byte(_symbolic_list):
                 # previous position minus greatest count
             count = 0
     return position, greatest_count
+
+
+def hook_libc_start_main(angr_proj, entry, libc_procedure):
+    log.info(f"Project entry: {hex(entry)}")
+    for _ in range(5):
+        next_block_addr = entry + angr_proj.factory.block(entry).vex.size
+        if angr_proj.factory.block(next_block_addr).capstone.insns[0].mnemonic == 'hlt' and \
+                angr_proj.factory.block(entry).capstone.insns[-1].mnemonic == 'call':
+            __libc_start_main_addr = angr_proj.factory.block(entry).instruction_addrs[-1]
+            log.success(f"Hook __libc_start_main at {hex(__libc_start_main_addr)}")
+            angr_proj.hook(__libc_start_main_addr, libc_procedure)
+            return
+        else:
+            entry = next_block_addr

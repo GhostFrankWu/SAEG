@@ -127,6 +127,16 @@ class ReplacePuts(angr.procedures.libc.puts.puts):
             reorder_successors(self, new_states)
 
 
+class ReplaceLibcStartMain(angr.SimProcedure):
+    def run(self, main, argc, argv, init, fini):
+        if self.state.globals['binary'].challenge.target_property['arch_bytes'] == 4:
+            main = self.state.mem[self.state.regs.sp:].int.resolved
+        self.call(main, (0, 0, 0), 'after_main')
+
+    def after_main(self):
+        self.exit(0)
+
+
 class ServerMain64LibPWNAbleHarness(angr.SimProcedure):
     def run(self, argc, argv, _, __, main_addr):
         self.call(main_addr, (argc, argv, 0), 'after_main')

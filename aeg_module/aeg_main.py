@@ -10,6 +10,7 @@ from .challenge import Challenge, FlagFound
 from .mod_leak import init_leaks, ARCH_64_BASE, ARCH_32_BASE
 from .mod_exploit import init_exploits
 from .mod_technique import check_win, check_mem_write, check_addr_leak, DFS
+from .mod_sim_procedure import ReplaceLibcStartMain
 from .engine import SmallEngine
 from .binary_interactive import InteractiveBinary
 
@@ -40,23 +41,19 @@ class AEGModule:
     def exploit(self):
         start_time = time.time()
         challenge = self.challenge
-        if self.flirt:
-            challenge.target_property['flirt'] = self.flirt
+        challenge.target_property['flirt'] = self.flirt
         challenge.preprocess()
-        arch_bytes = challenge.target_property['arch_bytes']
         main_opts = {}
-        arch_base = ARCH_64_BASE if challenge.target_property['arch_bytes'] == 8 else ARCH_32_BASE
+        arch_base = 0
         if challenge.protection['PIE']:
+            arch_base = ARCH_64_BASE if challenge.target_property['arch_bytes'] == 8 else ARCH_32_BASE
             main_opts['base_addr'] = arch_base
         project = angr.Project(self.challenge.target_property['file'],
                                load_options={"auto_load_libs": False, },
                                # force_load_libs=[challenge.target_property['libc']],
                                lib_opts={challenge.target_property['libc']: {"base_addr": ARCH_64_LIBC_BASE}},
                                main_opts=main_opts)
-        if challenge.protection['PIE']:
-            challenge.do_hook(project, arch_base)
-        else:
-            challenge.do_hook(project)
+        challenge.do_hook(project, arch_base)
         self.interactive_binary.io_seg_addr = challenge.get_segment_address_copy()
 
         project.factory.default_engine = SmallEngine(project)  # slightly faster than default engine
@@ -69,51 +66,35 @@ class AEGModule:
             so.ZERO_FILL_UNCONSTRAINED_MEMORY,
         }
 
-        entry = int(str(project.entry))
-        entry_block_instructions = project.factory.block(entry).instruction_addrs
-        log.info(f"Project entry: {hex(entry)}")
+        # args_in = [challenge.target_binary.file.name]
+        # arg = claripy.BVS("argv1", 0x100 * 8)
+        # args_in.append(arg)
 
         if challenge.target_binary.symbols.get('main'):
-            main_addr = challenge.target_binary.symbols['main']
-        else:
-            es = project.factory.entry_state(add_options=extras)
-            if arch_bytes == 4:
-                ad = entry_block_instructions[-2] + 1
-            else:
-                ad = entry_block_instructions[-2] + 3
-            main_addr = es.solver.eval(little_endian(es.memory.load(ad, size=arch_bytes), arch_bytes)) & 0xffffffff
-            if project.factory.block(entry).capstone.insns[-2].mnemonic == 'lea':
-                main_addr += entry_block_instructions[-1] - arch_base if challenge.protection['PIE'] else 0
-                main_addr &= 0x7ff_ffff
-        log.info(f"main as: {hex(main_addr)}")
-        # if challenge.target_property['static']:
-        #     state = project.factory.full_init_state(add_options=extras)
-        ret_addr = entry_block_instructions[-1]
-        if challenge.protection['PIE']:
-            main_addr += arch_base
-            ret_addr += arch_base
-        # args_in = [self.challenge_binary.target_binary.file.name]
-        # if self.argv_in:
-        #     arg = claripy.BVS("argv1", 0x3000 * 8)
-        #     args_in.append(arg)
-        state = project.factory.call_state(addr=main_addr, add_options=extras, ret_addr=ret_addr)
-
-        state.register_plugin("heap", angr.state_plugins.heap.heap_ptmalloc.SimHeapPTMalloc(ARCH_64_HEAP_BASE))
-        for file_name in ['flag', 'flag.txt', '.pass']:
-            state.fs.insert(file_name, angr.storage.SimFile(file_name, content=b'flag{12345678-90ab-cdef}', size=24))
-
-        simulation_mgr = project.factory.simulation_manager(state, save_unconstrained=True)
-
-        if challenge.target_binary.sym.get("main"):
             self.interactive_binary.rop_address = challenge.target_binary.sym.get("main")
+            main_addr = challenge.target_binary.symbols.get('main') + arch_base
+            log.info(f"Set main as: {hex(main_addr)}")
+            states = [project.factory.call_state(addr=main_addr, add_options=extras, ret_addr=arch_base)]
+        else:
+            entry = int(str(project.entry))
+            if challenge.target_property['static']:
+                hook_libc_start_main(project, entry, ReplaceLibcStartMain())
+            states = [project.factory.entry_state(add_options=extras)]
 
-        # simulation_mgr.use_technique(WinFinder(binary))
+        for state in states:
+            state.register_plugin("heap", angr.state_plugins.heap.heap_ptmalloc.SimHeapPTMalloc(ARCH_64_HEAP_BASE))
+            for file_name in ['flag', 'flag.txt', '.pass']:
+                state.fs.insert(file_name, angr.storage.SimFile(file_name, b'flag{12345678-90ab-cdef}', size=24))
+
+        simulation_mgr = project.factory.simulation_manager(states, save_unconstrained=True)
+
         if self.max_active_size == 1:
             simulation_mgr.use_technique(DFS())  # faster for simple binary, as its name.
+        # simulation_mgr.use_technique(WinFinder(binary))
         # simulation_mgr.use_technique(angr.exploration_techniques.Threading())
 
         for active in simulation_mgr.active:
-            active.globals['binary'] = self.interactive_binary
+            active.globals['binary'] = self.interactive_binary.__copy__()
             active.globals['challenge'] = self.challenge
             active.libc.max_strtol_len = 17  # 20  # old is len(str(2**31)) + 1 = 11
             active.libc.buf_symbolic_bytes = 0x100  # default is 60, for log inputs like scanf
