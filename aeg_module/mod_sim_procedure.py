@@ -133,7 +133,7 @@ class ReplaceLibcStartMain(angr.SimProcedure):
             main = self.state.mem[self.state.regs.sp:].int.resolved
         self.call(main, (0, 0, 0), 'after_main')
 
-    def after_main(self):
+    def after_main(self, _, __, ___, ____, ______):
         self.exit(0)
 
 
