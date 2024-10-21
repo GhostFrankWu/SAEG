@@ -72,7 +72,6 @@ def do_addr_leak(state, stdin, stdout, binary):
                         real_leak_text = b'7' + leak_libc_raw.split(b'0x7')[1][:11]
                         log.success(f"Leak libc address as: {real_leak_text}")
                         libc_base = int(real_leak_text, 16) + 0x201000 - 0x10
-                        libc_base = libc_base + 0x1ff000  # mmap behavior is different on newer ASLR
                         log.success(f"Got libc base: {hex(libc_base)}")
                         binary.io_seg_addr['libc'] = libc_base
                         return 'libc'

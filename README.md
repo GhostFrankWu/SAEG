@@ -16,8 +16,8 @@ Demo video for SAEG(演示视频):
 [![asciicast demo video](https://asciinema.org/a/bMvlXJ8PkxqE2hoXyYtAmLaec.svg)](https://asciinema.org/a/bMvlXJ8PkxqE2hoXyYtAmLaec)
 
 ## Installing & Testing on Docker
-It is recommended to use Ubuntu20.04 or later on docker to run the test. 
-Example of [Docker file](Dockerfile) is based on Ubuntu20.04.
+It is recommended to use Ubuntu20.04 or later on docker to run the test.  
+Example of [Docker file](Dockerfile) is based on Ubuntu22.04.
 Also refer to [CI file](.github/workflows/test.yml) for more details.
 ```sh
 docker build -t saeg:01 .
@@ -25,7 +25,7 @@ docker build -t saeg:01 .
 docker run -v /tmp:/test_res saeg:01 bash -c 'cd /aeg && python3 saeg.py -f x -t stack'
 # Get result
 cat /tmp/test_result.txt
-# Interactively run SAEG
+# Interactively run SAEG 
 docker run -it saeg:01 bash
 ```
 如果您在中国大陆地区，[Dockerfile](Dockerfile) 中有两行注释掉的源(apt和pip)，您可以取消注释并以加速构建。
@@ -38,6 +38,8 @@ python3 saeg.py -f input_file
 pwn remote with libc and ld specified:  
 ```sh
 python3 saeg.py -f input_file -l [LIBC.so] -d [LD.so] -i [ip:port]
+# for example:
+python3 saeg.py -f ./vuln -l `pwd`/libc.so -d ./ld.so -i 192.168.1.1:1337
 ```
 Get help message:
 ```sh
@@ -76,8 +78,8 @@ If you use this repository for research, please cite our paper:
 ```
 
 ### Publication
-
-[Paper PDF TBA]()
+Link of the **draft** version of our paper (Neither a submitted version nor a preprint):  
+[Paper PDF](https://ghostfrankwu.github.io/papers/saeg_draft.pdf)
 
 ### Reference of open source projects
 Zeratool is a traditional symbolic execution framework for binary analysis and (stack) exploitation:  
@@ -92,9 +94,13 @@ https://github.com/Hank0438/AEG
 Framework for detection of memory corruption:  
 https://github.com/angr/heaphopper  
 
+Awsome kernel AEGs (with angr):  
+https://github.com/plummm/SyzScope   
+https://github.com/seclab-ucr/SyzBridge  
+
 ## Discussion
 The performance of the CI server provided by Github is fluctuating, so there may be significant deviations even after two consecutive runs. Therefore it is more recommended to run performance tests locally.
 >Github提供的CI服务器性能较为波动，即使连续两次运行也会有较大的偏差，因此更推荐在本地运行性能测试。
 
 This framework focuses on static analysis and dynamic verification, so its effectiveness is not precise enough for all protecting mechanisms (including system-level ASLR) are disabled scenarios and utilizing dangling pointers on the stack. Currently, other solutions for work include dynamically running and interacting with GDB, but these contents are not the aim of this work (information leakage).
->该框架侧重于静态分析，动态验证，因此对于保护全关的并禁用系统ASLR的场景以及利用栈上悬垂指针的场景效果不够精确，目前其他工作的解决方案是动态跑起来和GDB交互之类的，但这些内容并非本工作（信息泄露）的目标。
+>该框架侧重于静态分析，动态验证，因此对于保护全关的并禁用系统ASLR的场景以及利用栈上悬垂指针的场景效果不够精确，目前其他工作的解决方案是动态调试，但这些内容并非本工作（信息泄露）的目标。
