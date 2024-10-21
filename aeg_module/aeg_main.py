@@ -14,7 +14,6 @@ from .mod_sim_procedure import ReplaceLibcStartMain
 from .engine import SmallEngine
 from .binary_interactive import InteractiveBinary
 
-
 INFINITE_ACTIVE = -1
 
 
@@ -79,6 +78,7 @@ class AEGModule:
             entry = int(str(project.entry))
             if challenge.target_property['static']:
                 hook_libc_start_main(project, entry, ReplaceLibcStartMain())
+            # hook_libc_start_main(project, entry, ReplaceLibcStartMain())
             states = [project.factory.entry_state(add_options=extras)]
 
         for state in states:
@@ -96,18 +96,23 @@ class AEGModule:
         for active in simulation_mgr.active:
             active.globals['binary'] = self.interactive_binary.__copy__()
             active.globals['challenge'] = self.challenge
-            active.libc.max_strtol_len = 17  # 20  # old is len(str(2**31)) + 1 = 11
+            active.libc.max_strtol_len = 17  # 20   # old is len(str(2**31)) + 1 = 11
             active.libc.buf_symbolic_bytes = 0x100  # default is 60, for log inputs like scanf
         log.info("Start finding unconstrained state")
         self.sim_explore(simulation_mgr, project, challenge, 1, start_time, 1)
         log.failure("Bad luck...\nBye~")
 
     def sim_explore(self, sim_mgr, project, challenge, branch_depth, start_time, explore_depth):
-        while sim_mgr.active and time.time() - start_time < self.timeout:
+        while (sim_mgr.active or sim_mgr._stashes.get('deferred')) and time.time() - start_time < self.timeout:
             if self.max_active_size != 1 and self.max_active_size != INFINITE_ACTIVE:
-                active_len = len(sim_mgr.active)
                 sim_mgr.move(from_stash='active', to_stash='deferred',
-                             filter_func=lambda x: sim_mgr.active.index(x) < active_len - self.max_active_size)
+                             filter_func=lambda x: sim_mgr.active.index(x) < len(sim_mgr.active) - self.max_active_size)
+            if not sim_mgr.active and sim_mgr._stashes.get('deferred'):
+                sim_mgr.move(from_stash='deferred', to_stash='active',
+                             filter_func=None if self.max_active_size != INFINITE_ACTIVE
+                             else lambda x: sim_mgr.deferred.index(x) < self.max_active_size)
+            # if sim_mgr._stashes.get('deferred'):
+            #     sim_mgr._clear_states('deferred')
             if self.debug:
                 context.log_level = 'debug'
                 try:
@@ -136,8 +141,6 @@ class AEGModule:
             if self.debug:
                 if sim_mgr.errored:
                     sim_mgr.errored[0].reraise()
-            # sim_mgr.move(from_stash='deferred', to_stash='active',
-            # filter_func=lambda x: sim_mgr.deferred.index(x) < self.max_active_size)
         else:
             log.warning("Timeout, killed")
         return explore_depth
@@ -235,6 +238,7 @@ class AEGModule:
                 binary.close()
                 binary = binary_before.__copy__()
                 binary.close()
+                binary.connect(state)
                 restart = False
             progress = False
             log.info(f"Step with known segments: {binary.io_seg_addr}")

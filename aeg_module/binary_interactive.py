@@ -101,7 +101,8 @@ class InteractiveBinary:
                 else:
                     self.current_process.send(data_to_send)
             else:
-                if b'{' in flag and b'}' in flag:
+                # Important: Change the format of flag if necessary
+                if b'flag{' in flag and b'}' in flag:
                     log.success(f"Win! Received: {flag}")
                     log.success(f"Reporting flag as: {re.findall(b'flag{.*}', flag)[0]}")
                     if self.interactive:
@@ -143,6 +144,6 @@ class InteractiveBinary:
         self.close()
         log.failure("Failed for this try")
 
-    def send_payload(self, state, payload):
+    def send_payload(self, state, payload, check_alive=True):
         payload = strip_zero_in_payload(payload)
-        return self.warped_io(state, payload)
+        return self.warped_io(state, payload, check_alive)

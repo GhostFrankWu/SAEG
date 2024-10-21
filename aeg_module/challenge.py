@@ -54,6 +54,7 @@ class Challenge:
             '__cxa_allocate_exception': ReplaceCxaAllocateException(),
             # 'atol': ReplaceAtol(self),
             'system': ReplaceSystem(),
+            'execve': ReplaceSystem(),
         })
 
     def _init_func(self):
@@ -171,6 +172,7 @@ class Challenge:
         self.r2_ana_op.append(op_)
         log.info(f"Use {op_} to analyze binary")
         self.r2_pipe.cmd(op_)
+        log.info(f"Analyze done")
 
     def get_segment_address_copy(self):
         return copy.deepcopy(self.segment_address)

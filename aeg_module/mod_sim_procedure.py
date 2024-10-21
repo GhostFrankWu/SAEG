@@ -1,7 +1,7 @@
 import angr.procedures.libc.printf
-import angr.procedures.libc.scanf
 import angr.procedures.libc.puts
 from angr import SimUnsatError
+from claripy import If
 
 from .utils import *
 from .mod_leak import MitigateCanaryPuts, MitigatePIEPuts
@@ -9,11 +9,10 @@ from .mod_leak import MitigateCanaryPuts, MitigatePIEPuts
 
 class ReplaceGets(angr.SimProcedure):
     """
-    angr default gets hook can find unconstrained state in the same block.
+    angr default gets hook can only find unconstrained state in the same block.
     We need to write a hook to provide longer symbolic input.
     for add \n or not, we may return multi successors
     """
-    IS_FUNCTION = True
 
     def __init__(self, challenge):
         super().__init__()
@@ -26,8 +25,8 @@ class ReplaceGets(angr.SimProcedure):
         stdin = new_state.posix.get_fd(0)
         data_read, data_size = stdin.read_data(0x200)
         for i, byte in enumerate(data_read.chop(8)):
-            new_state.solver.add(new_state.solver.If(i + 1 != data_size, byte != b'\n', byte == b'\n'))
-            # new_state.solver.Or(i + 2 == 0x1000, stdin.eof(), byte == b'\n')))
+            new_state.solver.add(If(i + 1 != data_size, byte != b'\n', byte == b'\n'))
+            # Or(i + 2 == 0x1000, stdin.eof(), byte == b'\n')
         new_state.memory.store(dst + data_size, b'\0')
 
         stdin = self.state.posix.get_fd(0)
@@ -170,7 +169,6 @@ class ReplaceCxaAllocateException(angr.SimProcedure):
 
 class ReplaceSystem(angr.SimProcedure):
     def run(self, cmd):  # get_max_str_len may be slow
-        log.info("Enter system hook...")
         var_loc = self.state.solver.eval(cmd)
         print(hex(var_loc))
         symbolic_list = [self.state.memory.load(var_loc + x, 1).symbolic

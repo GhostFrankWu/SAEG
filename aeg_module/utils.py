@@ -1,6 +1,7 @@
 from subprocess import Popen
 
 import angr
+import claripy
 from pwn import *
 import json
 from pwnlib.elf.elf import Function
@@ -61,6 +62,7 @@ def get_win_functions(challenge):
     else:
         challenge.r2_op('aa')
         challenge.r2_op('aac')
+        challenge.r2_op('aaaa')
     functions = [func for func in r2.cmdj('aflj')]
     string_used_addr = {}
     strings = [string_ for string_ in r2.cmdj('izj')]
@@ -69,6 +71,7 @@ def get_win_functions(challenge):
         if any([x[:-1] in value for x in known_flag_names]):
             address = string_['vaddr']
             refs = [func for func in json.loads(r2.cmd('axtj @ {}'.format(address)))]
+            print(value, [hex(ref['from']) for ref in refs])
             for ref in refs:
                 if 'fcn_name' in ref:
                     string_used_addr[ref['fcn_name']] = ref['from']
@@ -100,11 +103,11 @@ def get_win_functions(challenge):
     return win_addr
 
 
-def greedy_backward_search(challenge, target_addr, start_addr=None, max_depth=32):
+def greedy_backward_search(challenge, target_addr, start_addr=None, max_depth=8):
     if max_depth == 0:
         return []
     r2 = challenge.get_r2()
-    challenge.r2_op('aaaaa')
+    challenge.r2_op('aaaa')
     if start_addr is None:
         start_addr = r2.cmdj('iej')[0]['vaddr']
     if start_addr != target_addr:
@@ -119,6 +122,8 @@ def greedy_backward_search(challenge, target_addr, start_addr=None, max_depth=32
             if target_bb_addr is None:
                 return [target_addr]
             xrefs = r2.cmdj(f'axtj @ {target_bb_addr}')
+            xrefs = [i for i in xrefs if i['type'] == 'CALL' or str(i.get("opcode")).startswith('j')
+                     or str(i.get("flag")).startswith('entry')]
             target_bb_addr -= 1  # todo: better way to find the start address
         for i in xrefs:
             r = greedy_backward_search(challenge, i['from'], start_addr, max_depth - 1)
@@ -283,8 +288,8 @@ def strip_zero_in_payload(payload, is_raw=False):
 def reorder_successors(sim: angr.SimProcedure, successors: list):
     ret = sim.state.stack_pop()
     sim.state.stack_push(ret)
-    for i in range(len(successors)):
-        sim.successors.add_successor(successors[i], ret, sim.state.solver.true, 'Ijk_NoHook')
+    for i in range(len(successors)):  # https://github.com/angr/angr-doc/blob/master/docs/paths.md
+        sim.successors.add_successor(successors[i], ret, claripy.true(), 'Ijk_Ret')
 
 
 def get_chunk_by_addr(binary, addr):
