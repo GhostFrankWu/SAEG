@@ -72,6 +72,7 @@ def do_addr_leak(state, stdin, stdout, binary):
                         real_leak_text = b'7' + leak_libc_raw.split(b'0x7')[1][:11]
                         log.success(f"Leak libc address as: {real_leak_text}")
                         libc_base = int(real_leak_text, 16) + 0x201000 - 0x10
+                        # libc_base = libc_base + 0x1ff000  # mmap behavior is different on newer ASLR
                         log.success(f"Got libc base: {hex(libc_base)}")
                         binary.io_seg_addr['libc'] = libc_base
                         return 'libc'
@@ -287,3 +288,14 @@ class WinFinder(angr.exploration_techniques.ExplorationTechnique):
             except SimEngineError:
                 pass
         return r
+
+
+class MemoryManager(angr.exploration_techniques.ExplorationTechnique):
+    """
+    Check memory usage and avoid OOM
+    """
+    # move top x to active and clear rest
+    # and clear deadended, errored stash
+
+    # if sim_mgr._stashes.get('deferred'):
+    #     sim_mgr._clear_states('deferred')

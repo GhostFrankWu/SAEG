@@ -7,6 +7,8 @@ import json
 from pwnlib.elf.elf import Function
 
 known_flag_names = ["/bin/sh\x00", " flag\x00", "/bin/bash\x00", "flag.txt\x00"]
+stupid_rhg_flag_names = ["$(echo"]
+known_flag_names.append(*stupid_rhg_flag_names)
 known_flag_funcs = ['system', 'open', 'execve']
 known_win_funcs = ['system', 'open', 'execve']
 
@@ -71,7 +73,7 @@ def get_win_functions(challenge):
         if any([x[:-1] in value for x in known_flag_names]):
             address = string_['vaddr']
             refs = [func for func in json.loads(r2.cmd('axtj @ {}'.format(address)))]
-            print(value, [hex(ref['from']) for ref in refs])
+            # print(value, [hex(ref['from']) for ref in refs])
             for ref in refs:
                 if 'fcn_name' in ref:
                     string_used_addr[ref['fcn_name']] = ref['from']
@@ -222,7 +224,7 @@ def get_one_gadget(challenge):
 
     gadget_address = []
     for i in lines:
-        if b'/bin/sh' in i:
+        if b'/bin/sh' in i and i[:2] == b'0x':
             log.info("One Gadget {}".format(i))
             gadget_address.append(i.split(b' ')[0])
     return [int(addr, 16) for addr in gadget_address]
