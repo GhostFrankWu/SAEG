@@ -117,6 +117,9 @@ class AEGModule:
                 context.log_level = 'debug'
                 try:
                     print([hex(x.solver.eval(x.regs.pc)) for x in sim_mgr.active])
+                    print([hex(x.solver.eval(x.regs.sp)) for x in sim_mgr.active])
+                    print([x.memory.load(x.solver.eval(x.regs.pc), 8) for x in sim_mgr.active])
+                    print(project.loader.main_object.segments)
                 except SimUnsatError:
                     pass
 
@@ -165,7 +168,7 @@ class AEGModule:
         for func_name, func in challenge.target_binary.functions.items():
             if func.address <= block.addr < func.address + func.size:
                 log.info(f"Overflow func({func_name}): 0x{hex(func.address)}")
-                binary.rop_address = func.address
+                # binary.rop_address = func.address
                 break
         if not binary.rop_address:
             log.info("Try to find overflow func addr with r2")
