@@ -55,7 +55,7 @@ class AEGModule:
         challenge.do_hook(project, arch_base)
         self.interactive_binary.io_seg_addr = challenge.get_segment_address_copy()
 
-        project.factory.default_engine = SmallEngine(project)  # slightly faster than default engine
+        project.factory._tls.default_engine = SmallEngine(project)  # slightly faster than default engine
 
         extras = {
             so.REVERSE_MEMORY_NAME_MAP,
